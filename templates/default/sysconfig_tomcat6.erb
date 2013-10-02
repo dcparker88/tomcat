@@ -22,6 +22,8 @@
 
 # Where your java installation lives
 JAVA_HOME=<%= node["java"]["java_home"] %>
+LOG_DIR=<%= node["tomcat"]["log_dir"] %>
+HOME_DIR=<%= node["tomcat"]["home"] %>
 
 # Where your tomcat installation lives
 CATALINA_BASE="<%= node["tomcat"]["base"] %>"
@@ -37,6 +39,7 @@ JAVA_OPTS="<%= node["tomcat"]["java_options"] %>"
 
 # What user should run tomcat
 TOMCAT_USER="<%= node["tomcat"]["user"] %>"
+TOMCAT_GROUP="<%= node["tomcat"]["group"] %>"
 
 # You can change your tomcat locale here
 #LANG="en_US"

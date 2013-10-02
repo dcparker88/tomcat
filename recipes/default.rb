@@ -29,16 +29,12 @@ tomcat_pkgs = value_for_platform(
   ["centos","redhat","fedora"] => {
     "default" => ["tomcat#{node["tomcat"]["base_version"]}","tomcat#{node["tomcat"]["base_version"]}-admin-webapps"]
   },
-  ["smartos"] => {
-    "default" => ["apache-tomcat"]
-  },
   "default" => ["tomcat#{node["tomcat"]["base_version"]}"]
 )
 
 tomcat_pkgs.each do |pkg|
   package pkg do
     action :install
-    version node["tomcat"]["base_version"].to_s if platform_family?("smartos")
   end
 end
 
@@ -64,39 +60,6 @@ unless node['tomcat']['deploy_manager_apps']
   end
 end
 
-case node["platform"]
-when "smartos"
-  template "/opt/local/share/smf/apache-tomcat/manifest.xml" do
-    source "manifest.xml.erb"
-    owner "root"
-    group "root"
-    mode "0644"
-    notifies :run, "execute[tomcat_manifest]"
-  end
-  execute "tomcat_manifest" do
-    command "svccfg import /opt/local/share/smf/apache-tomcat/manifest.xml"
-    action :nothing
-    notifies :restart, "service[tomcat]"
-  end
-end
-
-service "tomcat" do
-  case node["platform"]
-  when "centos","redhat","fedora"
-    service_name "tomcat#{node["tomcat"]["base_version"]}"
-    supports :restart => true, :status => true
-  when "debian","ubuntu"
-    service_name "tomcat#{node["tomcat"]["base_version"]}"
-    supports :restart => true, :reload => false, :status => true
-  when "smartos"
-    service_name "tomcat"
-    supports :restart => true, :reload => false, :status => true
-  else
-    service_name "tomcat#{node["tomcat"]["base_version"]}"
-  end
-  action [:enable, :start]
-end
-
 node.set_unless['tomcat']['keystore_password'] = secure_password
 node.set_unless['tomcat']['truststore_password'] = secure_password
 
@@ -112,17 +75,16 @@ case node["platform"]
 when "centos","redhat","fedora"
   template "/etc/sysconfig/tomcat#{node["tomcat"]["base_version"]}" do
     source "sysconfig_tomcat6.erb"
-    owner "root"
-    group "root"
+    owner node["tomcat"]["user"]
+    group node["tomcat"]["group"]
     mode "0644"
     notifies :restart, "service[tomcat]"
   end
-when "smartos"
 else
   template "/etc/default/tomcat#{node["tomcat"]["base_version"]}" do
     source "default_tomcat6.erb"
-    owner "root"
-    group "root"
+    owner node["tomcat"]["user"]
+    group node["tomcat"]["group"]
     mode "0644"
     notifies :restart, "service[tomcat]"
   end
@@ -130,18 +92,37 @@ end
 
 template "#{node["tomcat"]["config_dir"]}/server.xml" do
   source "server.xml.erb"
-  owner "root"
-  group "root"
+  owner node["tomcat"]["user"]
+  group node["tomcat"]["group"]
   mode "0644"
   notifies :restart, "service[tomcat]"
 end
 
-template "#{node["tomcat"]["config_dir"]}/logging.properties" do
+template "/etc/tomcat#{node['tomcat']['base_version']}/logging.properties" do
   source "logging.properties.erb"
-  owner "root"
-  group "root"
+  owner node["tomcat"]["user"]
+  group node["tomcat"]["group"]
   mode "0644"
   notifies :restart, "service[tomcat]"
+end
+
+case node["platform"]
+when "redhat"
+template "/etc/rc.d/init.d/tomcat#{node['tomcat']['base_version']}" do
+  source "tomcat#{node['tomcat']['base_version']}_redhat.erb"
+  owner node["tomcat"]["user"]
+  group node["tomcat"]["group"]
+  mode "0755"
+  notifies :restart, "service[tomcat]"
+end
+when "ubuntu"
+template "/etc/init.d/tomcat#{node['tomcat']['base_version']}" do
+  source "tomcat#{node['tomcat']['base_version']}_ubuntu.erb"
+  owner node["tomcat"]["user"]
+  group node["tomcat"]["group"]
+  mode "0755"
+  notifies :restart, "service[tomcat]"
+end
 end
 
 unless node['tomcat']["ssl_cert_file"].nil?
@@ -189,4 +170,25 @@ unless node['tomcat']["truststore_file"].nil?
   cookbook_file "#{node['tomcat']['config_dir']}/#{node['tomcat']['truststore_file']}" do
     mode "0644"
   end
+end
+
+if node['tomcat']['catalina_rotate'] == true
+template "/etc/logrotate.d/tomcat#{node['tomcat']['base_version']}" do
+  source "tomcat#{node['tomcat']['base_version']}_logrotate.erb"
+  end
+end
+
+service "tomcat" do
+  service_name "tomcat#{node["tomcat"]["base_version"]}"
+  case node["platform"]
+  when "centos","redhat","fedora"
+    supports :restart => true, :status => true
+  when "debian","ubuntu"
+    supports :restart => true, :reload => false, :status => true
+  end
+  action [:enable]
+end
+
+service "tomcat" do
+  action :start
 end
